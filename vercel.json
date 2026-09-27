@@ -1,9 +1,5 @@
 ﻿{
-  "functions": {
-    "api/*.mts": {
-      "runtime": "nodejs-edge"
-    }
-  },
+  "version": 2,
   "rewrites": [
     { "source": "/api/mcp", "destination": "/api/mcp.mts" },
     { "source": "/api/sync", "destination": "/api/sync.mts" },
