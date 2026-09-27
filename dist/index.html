@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Momentum Pro | Life OS</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SortableJS for Drag & Drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <!-- Chart.js for Deep Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // Dynamic Theme Engine via Tailwind Config
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        theme: {
+                            400: 'var(--theme-400)',
+                            500: 'var(--theme-500)',
+                            600: 'var(--theme-600)',
+                        },
+                        surface: {
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* CSS Variables for Theming */
+        :root {
+            --theme-400: #818cf8; 
+            --theme-500: #6366f1;
+            --theme-600: #4f46e5;
+            --theme-rgb: 99, 102, 241;
+        }
+        
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', system-ui, sans-serif; overflow-x: hidden; }
+
+        /* Smooth Interactions */
+        .btn-press { transition: transform 0.1s ease, filter 0.2s ease; }
+        .btn-press:active { transform: scale(0.95); }
+        .task-row { transition: all 0.3s ease; }
+        .task-row.sortable-ghost { opacity: 0.4; background-color: rgba(255,255,255,0.1); border: 1px dashed var(--theme-500); }
+        
+        /* 2-Minute Spark Focus Mask */
+        .spark-locked { opacity: 0.3; pointer-events: none; filter: grayscale(100%); transition: all 0.5s ease; }
+
+        /* Plant Evolution Animation */
+        .plant-stage { transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: bottom; }
+        .grow-anim { animation: springUp 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes springUp { 0% { transform: scaleY(0); } 100% { transform: scaleY(1); } }
+
+        /* Confetti Reward - Fixed with pointer-events: none to prevent blocking clicks */
+        .confetti { position: fixed; top: -10px; width: 8px; height: 16px; z-index: 9999; animation: fall linear forwards; border-radius: 4px; pointer-events: none; }
+        @keyframes fall { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+
+        /* Heatmap Grid Colors */
+        .heat-miss { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; } 
+        .heat-try { background-color: rgba(var(--theme-rgb), 0.2); color: var(--theme-400); } 
+        .heat-pass { background-color: rgba(var(--theme-rgb), 0.6); color: #fff; } 
+        .heat-perfect { background-color: var(--theme-500); color: #fff; box-shadow: 0 0 10px rgba(var(--theme-rgb), 0.8); font-weight: bold; } 
+        .heat-freeze { background-color: #3b82f6; color: #fff; opacity: 0.8; }
+
+        /* Trophy Lock Overlay */
+        .trophy-locked { filter: grayscale(100%) opacity(0.3); }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6 lg:p-8 flex flex-col items-center">
+
+    <!-- Header & Dashboard -->
+    <header class="w-full max-w-7xl flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div>
+            <h1 class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-theme-400 to-white tracking-tight">
+                Momentum Pro
+            </h1>
+            <p class="text-sm text-gray-400 mt-1 font-medium" id="current-date-display"></p>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <button onclick="startZenMode()" class="btn-press bg-surface-800 border border-theme-500/30 text-theme-400 px-4 py-2 rounded-xl text-sm font-bold shadow-lg hover:bg-surface-700">
+                🧘 Zen Focus
+            </button>
+            <div class="flex flex-col items-center justify-center bg-surface-800 px-5 py-2 rounded-xl border border-surface-700 shadow-lg cursor-pointer" onclick="switchTab('analytics')" title="Passing Streak (80%+) ">
+                <p class="text-[9px] text-gray-400 uppercase tracking-widest font-bold">Streak</p>
+                <p class="text-xl font-bold flex items-center gap-1 text-orange-400">
+                    🔥 <span id="streak-number">0</span>
+                </p>
+            </div>
+            <button id="btn-freeze" onclick="useFreeze()" class="btn-press bg-blue-500/10 border border-blue-500/30 text-blue-400 px-3 py-2 rounded-xl text-xs font-bold hover:bg-blue-500/20 disabled:opacity-50">
+                ❄️ Freeze
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- ================= LEFT COLUMN: Execution ================= -->
+        <section class="lg:col-span-6 flex flex-col gap-6">
+            
+            <div class="bg-surface-800 rounded-2xl p-4 border border-surface-700 shadow-xl flex items-center justify-between overflow-hidden relative">
+                <div class="z-10">
+                    <h3 class="text-sm font-bold text-white mb-1" id="reward-title">Daily Seedling</h3>
+                    <p class="text-xs text-gray-400 max-w-[200px]" id="reward-desc">Complete tasks to grow your momentum.</p>
+                </div>
+                <div class="text-5xl z-10 plant-stage" id="reward-visual">🌱</div>
+                <div class="absolute inset-0 bg-gradient-to-r from-transparent to-theme-500/10 opacity-50 pointer-events-none"></div>
+            </div>
+
+            <div class="bg-surface-800 rounded-2xl p-6 border border-surface-700 shadow-xl flex-grow flex flex-col relative">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold flex items-center gap-2 text-white">
+                        <span>🎯</span> Today's Execution
+                    </h2>
+                    <span id="progress-text" class="text-sm font-bold text-theme-400 bg-theme-500/10 px-3 py-1 rounded-full border border-theme-500/20">0%</span>
+                </div>
+
+                <div class="w-full bg-surface-900 rounded-full h-3 mb-6 overflow-hidden shadow-inner border border-surface-700">
+                    <div id="progress-bar" class="bg-theme-500 h-full rounded-full transition-all duration-700 ease-out">
+                        <!-- Removed animated pulse that was blocking interaction -->
+                    </div>
+                </div>
+                
+                <p id="grade-status" class="text-xs text-center font-semibold text-gray-500 mb-4 uppercase tracking-widest"></p>
+
+                <!-- Task Form -->
+                <form id="task-form" class="flex flex-col gap-3 mb-6 bg-surface-900/50 p-4 rounded-xl border border-surface-700 relative z-10">
+                    <div class="flex gap-2">
+                        <input type="text" id="task-input" placeholder="What needs to be done?" required
+                            class="flex-1 bg-surface-900 border border-surface-600 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-theme-500 transition-colors">
+                        <button type="submit" class="btn-press bg-theme-500 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-theme-600 shadow-lg shadow-theme-500/30">Add</button>
+                    </div>
+                    <div class="flex flex-wrap gap-3 text-xs items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <select id="task-category" class="bg-surface-800 border border-surface-600 rounded p-1 text-gray-300 focus:outline-none cursor-pointer">
+                                <option value="💻">💻 Work</option>
+                                <option value="📚">📚 Study</option>
+                                <option value="🏋️">🏋️ Health</option>
+                                <option value="🎵">🎵 Music</option>
+                                <option value="🧹">🧹 Chore</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <label class="flex items-center gap-1 text-orange-400 cursor-pointer hover:text-orange-300 font-medium">
+                                <input type="checkbox" id="task-core" class="accent-orange-500 cursor-pointer" checked> 🔥 Core
+                            </label>
+                            <label class="flex items-center gap-1 text-yellow-400 cursor-pointer hover:text-yellow-300 font-medium">
+                                <input type="checkbox" id="task-spark" class="accent-yellow-500 cursor-pointer"> ⚡ Spark
+                            </label>
+                            <label class="flex items-center gap-1 text-gray-400 cursor-pointer hover:text-white">
+                                <input type="checkbox" id="task-oneoff" class="accent-theme-500 cursor-pointer"> One-off
+                            </label>
+                        </div>
+                    </div>
+                </form>
+
+                <div id="friction-insight" class="hidden mb-4 bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-300 flex justify-between items-center shadow-inner relative z-10">
+                    <span id="friction-text"></span>
+                    <button onclick="document.getElementById('friction-insight').classList.add('hidden')" class="text-red-400 hover:text-white ml-2">&times;</button>
+                </div>
+
+                <div id="task-list" class="flex flex-col gap-2 overflow-y-auto pr-2 pb-10 flex-grow min-h-[300px] relative z-10">
+                    <!-- Tasks injected by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= RIGHT COLUMN: OS Modules ================= -->
+        <section class="lg:col-span-6 flex flex-col gap-4">
+            
+            <div class="flex flex-wrap md:flex-nowrap gap-2 bg-surface-800 p-1.5 rounded-2xl border border-surface-700 shadow-lg">
+                <button onclick="switchTab('analytics')" id="tab-analytics" class="flex-1 py-2 text-xs md:text-sm font-bold rounded-xl bg-surface-700 text-white transition-colors">Deep Dive</button>
+                <button onclick="switchTab('coach')" id="tab-coach" class="flex-1 py-2 text-xs md:text-sm font-bold rounded-xl text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-1">🤖 Coach</button>
+                <button onclick="switchTab('trophies')" id="tab-trophies" class="flex-1 py-2 text-xs md:text-sm font-bold rounded-xl text-gray-400 hover:text-white transition-colors">🏆 Trophies</button>
+                <button onclick="switchTab('history')" id="tab-history" class="flex-1 py-2 text-xs md:text-sm font-bold rounded-xl text-gray-400 hover:text-white transition-colors">History</button>
+                <button onclick="switchTab('settings')" id="tab-settings" class="flex-1 py-2 text-xs md:text-sm font-bold rounded-xl text-gray-400 hover:text-white transition-colors">⚙️</button>
+            </div>
+
+            <div id="content-analytics" class="flex flex-col gap-4">
+                <div class="bg-surface-800 rounded-2xl p-5 border border-surface-700 shadow-xl">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-sm font-bold text-gray-300 tracking-wide uppercase">📈 7-Day Performance</h2>
+                        <span class="text-xs font-semibold px-2 py-1 bg-surface-900 rounded text-gray-400" id="avg-completion-stat">Avg: 0%</span>
+                    </div>
+                    <canvas id="trendChart" height="120"></canvas>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-surface-800 rounded-2xl p-5 border border-surface-700 shadow-xl flex flex-col items-center">
+                        <h2 class="text-xs font-bold text-gray-400 tracking-wide uppercase mb-3">Core vs Side Quests</h2>
+                        <div class="relative w-full max-w-[140px] aspect-square">
+                            <canvas id="ratioChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-surface-800 rounded-2xl p-5 border border-surface-700 shadow-xl flex flex-col justify-center gap-3">
+                        <div class="bg-surface-900/50 p-3 rounded-lg border border-theme-500/20 text-center">
+                            <p class="text-[10px] text-gray-500 uppercase font-bold">Total Perfect Days</p>
+                            <p class="text-2xl font-black text-theme-400" id="stat-perfect">0</p>
+                        </div>
+                        <div class="bg-surface-900/50 p-3 rounded-lg border border-green-500/20 text-center">
+                            <p class="text-[10px] text-gray-500 uppercase font-bold">Total Passed (80%+)</p>
+                            <p class="text-2xl font-black text-green-400" id="stat-passed">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="content-coach" class="hidden bg-surface-800 rounded-2xl border border-surface-700 shadow-xl flex flex-col h-[500px]">
+                <div class="p-4 border-b border-surface-700 bg-surface-800 rounded-t-2xl flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-theme-400 to-purple-500 flex items-center justify-center text-xl shadow-lg">🧠</div>
+                    <div>
+                        <h2 class="text-sm font-bold text-white">Momentum AI Coach</h2>
+                        <p class="text-xs text-theme-400">Offline Behavioral Analysis</p>
+                    </div>
+                </div>
+                <div class="flex-grow p-4 overflow-y-auto flex flex-col gap-4" id="coach-chat-window"></div>
+                <div class="p-4 border-t border-surface-700 bg-surface-900/50 rounded-b-2xl">
+                    <p class="text-xs text-center text-gray-500 italic">Coach analyzes your local data automatically to provide custom insights.</p>
+                </div>
+            </div>
+
+            <div id="content-trophies" class="hidden flex-col gap-6">
+                <div class="bg-surface-800 rounded-2xl p-6 border border-surface-700 shadow-xl">
+                    <h2 class="text-sm font-bold text-theme-400 tracking-widest uppercase mb-4 flex items-center gap-2">🌟 Rare (100% Perfect)</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="trophies-rare"></div>
+                </div>
+                <div class="bg-surface-800 rounded-2xl p-6 border border-surface-700 shadow-xl">
+                    <h2 class="text-sm font-bold text-green-400 tracking-widest uppercase mb-4 flex items-center gap-2">🟢 Uncommon (80%+ Pass)</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="trophies-uncommon"></div>
+                </div>
+                <div class="bg-surface-800 rounded-2xl p-6 border border-surface-700 shadow-xl">
+                    <h2 class="text-sm font-bold text-purple-400 tracking-widest uppercase mb-4 flex items-center gap-2">🔮 Secret Quests</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="trophies-secret"></div>
+                </div>
+            </div>
+
+            <div id="content-history" class="hidden bg-surface-800 rounded-2xl p-6 border border-surface-700 shadow-xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-sm font-bold text-gray-300 uppercase tracking-widest">📅 Activity Heatmap</h2>
+                    <div class="flex items-center gap-3 bg-surface-900 px-3 py-1 rounded-lg border border-surface-700">
+                        <button onclick="changeMonth(-1)" class="text-gray-400 hover:text-white px-2 py-1">&lt;</button>
+                        <span id="calendar-month-year" class="text-sm font-bold w-24 text-center text-theme-400"></span>
+                        <button onclick="changeMonth(1)" class="text-gray-400 hover:text-white px-2 py-1">&gt;</button>
+                    </div>
+                </div>
+                <div class="flex flex-wrap justify-center gap-4 mb-6 text-xs text-gray-400 font-medium">
+                    <span class="flex items-center gap-1"><div class="w-3 h-3 rounded heat-miss"></div> Needs Work</span>
+                    <span class="flex items-center gap-1"><div class="w-3 h-3 rounded heat-try"></div> < 80%</span>
+                    <span class="flex items-center gap-1"><div class="w-3 h-3 rounded heat-pass"></div> Passed</span>
+                    <span class="flex items-center gap-1"><div class="w-3 h-3 rounded heat-perfect"></div> Perfect</span>
+                </div>
+                <div class="grid grid-cols-7 gap-1 md:gap-2 text-center text-xs font-bold text-surface-500 mb-2">
+                    <div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div>
+                </div>
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1 md:gap-2"></div>
+            </div>
+
+            <div id="content-settings" class="hidden bg-surface-800 rounded-2xl p-6 border border-surface-700 shadow-xl flex flex-col gap-6">
+                <div>
+                    <label class="text-xs text-gray-400 font-bold uppercase tracking-wide">Color Theme</label>
+                    <div class="flex gap-3 mt-3">
+                        <button onclick="setTheme('indigo')" class="w-8 h-8 rounded-full bg-indigo-500 ring-2 ring-offset-2 ring-offset-surface-800 ring-transparent focus:ring-indigo-500 transition-all shadow-lg"></button>
+                        <button onclick="setTheme('emerald')" class="w-8 h-8 rounded-full bg-emerald-500 ring-2 ring-offset-2 ring-offset-surface-800 ring-transparent focus:ring-emerald-500 transition-all shadow-lg"></button>
+                        <button onclick="setTheme('rose')" class="w-8 h-8 rounded-full bg-rose-500 ring-2 ring-offset-2 ring-offset-surface-800 ring-transparent focus:ring-rose-500 transition-all shadow-lg"></button>
+                        <button onclick="setTheme('amber')" class="w-8 h-8 rounded-full bg-amber-500 ring-2 ring-offset-2 ring-offset-surface-800 ring-transparent focus:ring-amber-500 transition-all shadow-lg"></button>
+                    </div>
+                </div>
+                <hr class="border-surface-700">
+                <div>
+                    <label class="text-xs text-gray-400 font-bold uppercase tracking-wide">Notifications</label>
+                    <button onclick="requestPushPermission()" class="mt-3 w-full py-2.5 bg-surface-700 text-sm font-medium rounded-lg hover:bg-surface-600 transition border border-surface-600 shadow">Enable 8 PM Reminders 🔔</button>
+                </div>
+                <hr class="border-surface-700">
+                <div>
+                    <label class="text-xs text-gray-400 font-bold uppercase tracking-wide mb-3 block">Data Management (Offline)</label>
+                    <div class="flex gap-3">
+                        <button onclick="exportData()" class="btn-press flex-1 bg-theme-500/20 text-theme-400 border border-theme-500/30 text-xs font-bold py-2.5 rounded-lg hover:bg-theme-500/30">📥 Export Backup</button>
+                        <label class="btn-press flex-1 bg-surface-700 text-gray-300 border border-surface-600 text-xs font-bold py-2.5 rounded-lg hover:bg-surface-600 text-center cursor-pointer shadow">
+                            📤 Import Backup <input type="file" id="btn-import" accept=".json" class="hidden">
+                        </label>
+                    </div>
+                    <button onclick="resetData()" class="mt-3 w-full py-2 text-xs font-bold text-red-400 hover:text-red-300 bg-red-500/10 rounded-lg border border-red-500/20">Danger: Hard Reset Data</button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <div id="zen-mode" class="fixed inset-0 bg-surface-900/95 backdrop-blur-md hidden flex-col items-center justify-center z-50 opacity-0 transition-opacity duration-500">
+        <button onclick="closeZenMode()" class="absolute top-8 right-8 text-gray-400 hover:text-white text-4xl">&times;</button>
+        <p class="text-theme-400 text-sm font-bold tracking-widest uppercase mb-8">Zen Focus Mode</p>
+        <div id="zen-task-container" class="text-center max-w-2xl px-6 w-full"></div>
+    </div>
+
+    <script>
+        /**
+         * 🧠 Momentum Pro - Safety-First Edition
+         */
+
+        const DEFAULT_STATE = {
+            tasks: [], 
+            history: {}, 
+            settings: { theme: 'indigo', notifications: false, lastFreezeDate: null },
+            badges: [],
+            lastActiveDate: getLocalYMD()
+        };
+
+        // Safe Storage Loader
+        let state;
+        try {
+            state = JSON.parse(localStorage.getItem('momentumProOS'));
+            if (!state || typeof state !== 'object') state = DEFAULT_STATE;
+            if (!Array.isArray(state.tasks)) state.tasks = [];
+            if (!state.history) state.history = {};
+            if (!state.settings) state.settings = DEFAULT_STATE.settings;
+            if (!Array.isArray(state.badges)) state.badges = [];
+        } catch (e) {
+            console.warn("Storage blocked by browser privacy settings. App will run temporarily.");
+            state = DEFAULT_STATE;
+        }
+
+        let chartTrend = null, chartRatio = null, audioCtx = null;
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+
+        const TROPHIES = {
+            rare: [
+                { id: 'r1', target: 1, name: 'Bullseye', icon: '🎯', desc: '1 Perfect Day' },
+                { id: 'r7', target: 7, name: 'Warrior', icon: '⚔️', desc: '7 Perfect Days' },
+                { id: 'r30', target: 30, name: 'Genius', icon: '🧠', desc: '30 Perfect Days' },
+                { id: 'r100', target: 100, name: 'Slayer', icon: '🗡️', desc: '100 Perfect Days' },
+                { id: 'r200', target: 200, name: 'Mafia', icon: '🕴️', desc: '200 Perfect Days' },
+                { id: 'r300', target: 300, name: 'Einstein', icon: '⚛️', desc: '300 Perfect Days' },
+                { id: 'r365', target: 365, name: 'Tony STARK', icon: '🤖', desc: '365 Perfect Days' },
+            ],
+            uncommon: [
+                { id: 'u1', target: 1, name: 'Worker', icon: '👷', desc: '1 Pass (80%+)' },
+                { id: 'u7', target: 7, name: 'Hustler', icon: '🏃', desc: '7 Passes' },
+                { id: 'u30', target: 30, name: 'Grinder', icon: '⚙️', desc: '30 Passes' },
+                { id: 'u100', target: 100, name: 'Machine', icon: '🦾', desc: '100 Passes' },
+                { id: 'u200', target: 200, name: 'Unstoppable', icon: '🚂', desc: '200 Passes' },
+                { id: 'u300', target: 300, name: 'Nature Force', icon: '🌪️', desc: '300 Passes' },
+                { id: 'u365', target: 365, name: 'Architect', icon: '🏛️', desc: '365 Passes' },
+            ],
+            secret: [
+                { id: 's_night', name: 'Night Owl', icon: '🦉', desc: '100% after 11 PM' },
+                { id: 's_early', name: 'Early Bird', icon: '🌅', desc: '100% before 8 AM' },
+                { id: 's_mic', name: 'Mic Drop', icon: '🎤', desc: 'Finished a Music task' },
+                { id: 's_freeze', name: 'Ice Cold', icon: '❄️', desc: 'Used Streak Freeze' }
+            ]
+        };
+
+        const themes = {
+            indigo: { 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', rgb: '99, 102, 241' },
+            emerald: { 400: '#34d399', 500: '#10b981', 600: '#059669', rgb: '16, 185, 129' },
+            rose: { 400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', rgb: '244, 63, 94' },
+            amber: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706', rgb: '245, 158, 11' }
+        };
+
+        function getLocalYMD(dateStr = new Date()) {
+            const d = new Date(dateStr);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        
+        function saveState() {
+            try { localStorage.setItem('momentumProOS', JSON.stringify(state)); } catch (e) {}
+        }
+
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        
+        function playPop() {
+            try {
+                if(!audioCtx) return;
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } catch (e) {}
+        }
+        
+        function playTada() {
+            try {
+                if(!audioCtx) return;
+                [440, 554, 659, 880].forEach((freq, i) => {
+                    setTimeout(() => {
+                        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                        osc.type = 'triangle'; osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0.2, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+                        osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.6);
+                    }, i * 60);
+                });
+            } catch (e) {}
+        }
+
+        function triggerConfetti() {
+            const colors = ['#34d399', '#60a5fa', '#a78bfa', '#fb923c', '#f472b6'];
+            for (let i = 0; i < 80; i++) {
+                const conf = document.createElement('div');
+                conf.className = 'confetti';
+                conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                conf.style.left = Math.random() * 100 + 'vw';
+                conf.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                conf.style.opacity = Math.random();
+                conf.style.transform = `translateX(${(Math.random() - 0.5) * 200}px)`;
+                document.body.appendChild(conf);
+                setTimeout(() => conf.remove(), 4000);
+            }
+        }
+
+        // Initialize App once DOM is fully ready
+        document.addEventListener('DOMContentLoaded', () => {
+            setTheme(state.settings.theme);
+            generatePWA();
+            checkDailyReset();
+            
+            if (!state.tasks.some(t => t.id === 'endowed')) {
+                state.tasks.unshift({ id: 'endowed', text: "Showed up today", completed: true, category: '🧠', isCore: true, isSpark: false, isOneOff: false, skippedCount: 0 });
+            }
+
+            renderTasks();
+            updateProgressAndLogic();
+            renderCharts();
+            renderCalendar();
+            renderTrophies();
+            generateCoachInsights();
+            updateFreezeUI();
+            
+            document.getElementById('current-date-display').innerText = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+            
+            try {
+                if (typeof Sortable !== 'undefined') {
+                    new Sortable(document.getElementById('task-list'), {
+                        animation: 200, ghostClass: 'sortable-ghost',
+                        onEnd: (evt) => {
+                            const item = state.tasks.splice(evt.oldIndex, 1)[0];
+                            state.tasks.splice(evt.newIndex, 0, item);
+                            saveState();
+                        }
+                    });
+                }
+            } catch (e) { console.warn("SortableJS blocked by browser."); }
+
+            document.getElementById('task-form').addEventListener('submit', handleTaskAdd);
+            
+            document.body.addEventListener('click', initAudio, { once: true });
+            setInterval(checkDailyReset, 60000); 
+            setInterval(checkNotifications, 60000);
+        });
+
+        function handleTaskAdd(e) {
+            e.preventDefault();
+            const text = document.getElementById('task-input').value.trim();
+            if (text) {
+                state.tasks.push({
+                    id: Date.now(), text, completed: false, skippedCount: 0,
+                    category: document.getElementById('task-category').value,
+                    isCore: document.getElementById('task-core').checked,
+                    isSpark: document.getElementById('task-spark').checked,
+                    isOneOff: document.getElementById('task-oneoff').checked
+                });
+                
+                document.getElementById('task-input').value = '';
+                document.getElementById('task-spark').checked = false;
+                processStateChange();
+            }
+        }
+
+        function checkDailyReset() {
+            const todayStr = getLocalYMD();
+            if (state.lastActiveDate !== todayStr) {
+                updateTodayHistory(state.lastActiveDate);
+                
+                state.tasks.forEach(t => {
+                    if(!t.completed && !t.isOneOff && t.id !== 'endowed') t.skippedCount = (t.skippedCount || 0) + 1;
+                });
+
+                state.tasks = state.tasks.filter(t => !t.isOneOff || !t.completed); 
+                state.tasks.forEach(t => t.completed = (t.id === 'endowed')); 
+                
+                state.lastActiveDate = todayStr;
+                saveState();
+                renderTasks(); updateProgressAndLogic(); renderCharts(); renderCalendar(); generateCoachInsights(); updateFreezeUI();
+            }
+        }
+
+        function renderTasks() {
+            const listEl = document.getElementById('task-list');
+            listEl.innerHTML = '';
+            
+            const activeSpark = state.tasks.find(t => t.isSpark && !t.completed);
+
+            state.tasks.forEach(task => {
+                const isLocked = activeSpark && !task.isSpark && !task.completed;
+                const row = document.createElement('div');
+                
+                let bgClass = task.completed ? 'bg-surface-800/40 border-surface-700' : 'bg-surface-800 border-surface-600 hover:bg-surface-700/80';
+                if(task.isSpark && !task.completed) bgClass += ' ring-1 ring-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.1)]';
+                if(task.isCore && !task.completed && !task.isSpark) bgClass += ' border-l-4 border-l-orange-500';
+
+                row.className = `task-row flex items-center justify-between p-3.5 rounded-xl border cursor-grab active:cursor-grabbing mb-2 ${bgClass} ${isLocked ? 'spark-locked' : ''}`;
+                
+                const cb = isLocked ? `<div class="w-5 h-5 rounded border border-gray-600 flex items-center justify-center text-xs">🔒</div>` 
+                                    : `<input type="checkbox" class="w-5 h-5 accent-theme-500 cursor-pointer rounded" ${task.completed ? 'checked' : ''} onchange="toggleTask('${task.id}')">`;
+
+                let tags = '';
+                if(task.isCore) tags += `<span class="ml-2 text-[9px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Core</span>`;
+                if(task.isSpark) tags += `<span class="ml-2 text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Spark</span>`;
+                if(task.isOneOff) tags += `<span class="ml-2 text-[9px] bg-surface-700 text-gray-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">1-Off</span>`;
+
+                const textSpan = document.createElement('span');
+                textSpan.className = `text-sm md:text-base truncate font-medium flex-1 ${task.completed ? 'text-surface-500 line-through' : 'text-gray-100'} ${task.id === 'endowed' ? 'italic' : ''}`;
+                textSpan.textContent = task.text;
+                textSpan.innerHTML += ` ${tags}`; 
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-3 flex-1 overflow-hidden">
+                        ${cb}
+                        <span class="text-xl">${task.category}</span>
+                    </div>
+                    ${task.id !== 'endowed' ? `<button onclick="deleteTask('${task.id}')" class="text-gray-500 hover:text-red-400 p-1 transition-colors ml-2">🗑️</button>` : ''}
+                `;
+                
+                row.firstElementChild.appendChild(textSpan);
+                listEl.appendChild(row);
+            });
+        }
+
+        window.toggleTask = function(id) {
+            const task = state.tasks.find(t => String(t.id) === String(id));
+            if (task) {
+                const preRatio = getRatio();
+                task.completed = !task.completed;
+                
+                if (task.completed) {
+                    playPop();
+                    task.skippedCount = 0; 
+                    if(task.category === '🎵' && !state.badges.includes('s_mic')) state.badges.push('s_mic');
+                }
+                
+                processStateChange();
+                const postRatio = getRatio();
+                
+                if (preRatio < 1 && postRatio === 1) {
+                    playTada(); 
+                    triggerConfetti(); 
+                    
+                    const hr = new Date().getHours();
+                    if (hr >= 23 && !state.badges.includes('s_night')) state.badges.push('s_night');
+                    if (hr <= 8 && !state.badges.includes('s_early')) state.badges.push('s_early');
+                }
+            }
+        };
+
+        window.deleteTask = function(id) {
+            state.tasks = state.tasks.filter(t => String(t.id) !== String(id));
+            processStateChange();
+        };
+
+        function processStateChange() {
+            try {
+                updateTodayHistory(); saveState(); renderTasks(); updateProgressAndLogic(); 
+                if(!document.getElementById('content-analytics').classList.contains('hidden')) renderCharts();
+                if(!document.getElementById('content-history').classList.contains('hidden')) renderCalendar();
+                if(!document.getElementById('zen-mode').classList.contains('hidden')) startZenMode();
+                checkBadges();
+            } catch(e) { console.error("Update Error:", e); }
+        }
+
+        function getRatio() {
+            if (state.tasks.length === 0) return 0;
+            return state.tasks.filter(t => t.completed).length / state.tasks.length;
+        }
+
+        function determineStatus(ratio) {
+            if (ratio === 1) return 'perfect';
+            if (ratio >= 0.8) return 'pass';
+            if (ratio >= 0.5) return 'try';
+            return 'miss';
+        }
+
+        function updateTodayHistory(dateStr = getLocalYMD()) {
+            const existingStatus = state.history[dateStr]?.status;
+            if (existingStatus === 'freeze' && getRatio() < 1) return; 
+
+            state.history[dateStr] = {
+                ratio: getRatio(),
+                status: determineStatus(getRatio()),
+                tasks: state.tasks.map(t => ({...t})) 
+            };
+        }
+
+        function updateProgressAndLogic() {
+            const ratio = getRatio();
+            const pct = Math.round(ratio * 100);
+            const status = determineStatus(ratio);
+            
+            const bar = document.getElementById('progress-bar');
+            bar.style.width = `${pct}%`;
+            document.getElementById('progress-text').innerText = `${pct}%`;
+            
+            const gradeEl = document.getElementById('grade-status');
+            const todayRecord = state.history[getLocalYMD()];
+            
+            if (todayRecord?.status === 'freeze') {
+                bar.className = 'bg-blue-500 h-full rounded-full transition-all duration-700 shadow-[0_0_15px_rgba(59,130,246,0.5)]';
+                gradeEl.innerText = "❄️ Day Frozen (Streak Protected)"; gradeEl.className = "text-xs text-center font-bold text-blue-400 mb-4 uppercase tracking-widest";
+            } else if (status === 'perfect') {
+                bar.className = 'bg-theme-500 h-full rounded-full transition-all duration-700 shadow-[0_0_15px_rgba(var(--theme-rgb),0.8)]';
+                gradeEl.innerText = "🏆 Perfect Day!"; gradeEl.className = "text-xs text-center font-black text-theme-400 mb-4 uppercase tracking-widest";
+            } else if (status === 'pass') {
+                bar.className = 'bg-green-500 h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(34,197,94,0.5)]';
+                gradeEl.innerText = "✅ Passing Standard Met (>80%)"; gradeEl.className = "text-xs text-center font-bold text-green-400 mb-4 uppercase tracking-widest";
+            } else if (status === 'try') {
+                bar.className = 'bg-yellow-500 h-full rounded-full transition-all duration-700';
+                gradeEl.innerText = "⚠️ Can do better. Push for 80%!"; gradeEl.className = "text-xs text-center font-bold text-yellow-500 mb-4 uppercase tracking-widest";
+            } else {
+                bar.className = 'bg-surface-600 h-full rounded-full transition-all duration-700';
+                gradeEl.innerText = "🚀 Get started"; gradeEl.className = "text-xs text-center font-bold text-surface-500 mb-4 uppercase tracking-widest";
+            }
+
+            const vis = document.getElementById('reward-visual');
+            const title = document.getElementById('reward-title');
+            const quotes = ["'Discipline equals freedom.'", "'We are what we repeatedly do.'", "'Momentum is a leader's best friend.'"];
+            
+            vis.classList.remove('grow-anim'); void vis.offsetWidth; vis.classList.add('grow-anim');
+            if (pct === 0) { vis.innerText = '🌱'; title.innerText = 'Daily Seedling'; }
+            else if (pct < 50) { vis.innerText = '🌿'; title.innerText = 'Growing Sprout'; }
+            else if (pct < 80) { vis.innerText = '🪴'; title.innerText = 'Strong Plant'; }
+            else if (pct < 100) { vis.innerText = '🌳'; title.innerText = 'Deep Roots'; }
+            else { vis.innerText = '🌸'; title.innerText = 'Full Bloom!'; document.getElementById('reward-desc').innerText = quotes[Math.floor(Math.random()*quotes.length)]; }
+
+            let streak = 0; let d = new Date();
+            while(true) {
+                const s = getLocalYMD(d);
+                const stat = state.history[s]?.status;
+                if (stat === 'perfect' || stat === 'pass') streak++;
+                else if (stat === 'freeze') { }
+                else if (streak > 0 || (s !== getLocalYMD() && stat !== 'perfect' && stat !== 'pass')) break;
+                d.setDate(d.getDate() - 1);
+            }
+            document.getElementById('streak-number').innerText = streak;
+            
+            checkFrictionInsight();
+        }
+
+        function updateFreezeUI() {
+            const btn = document.getElementById('btn-freeze');
+            const today = getLocalYMD();
+            if (state.history[today]?.status === 'freeze') {
+                btn.disabled = true; btn.innerText = "❄️ Frozen"; return;
+            }
+            if (state.settings.lastFreezeDate) {
+                const daysSince = Math.floor((Date.now() - state.settings.lastFreezeDate) / (1000*60*60*24));
+                if (daysSince < 7) { btn.disabled = true; btn.innerText = `❄️ In ${7 - daysSince}d`; return; }
+            }
+            btn.disabled = false; btn.innerText = "❄️ Freeze";
+        }
+        window.useFreeze = function() {
+            if(confirm("Use your weekly Freeze? Your streak won't break today even if you miss tasks.")) {
+                state.settings.lastFreezeDate = Date.now();
+                state.history[getLocalYMD()] = { ratio: getRatio(), status: 'freeze', tasks: state.tasks.map(t=>({...t})) };
+                if(!state.badges.includes('s_freeze')) state.badges.push('s_freeze');
+                processStateChange(); updateFreezeUI();
+            }
+        };
+
+        function checkBadges() {
+            let perfectDays = 0; let passDays = 0;
+            Object.values(state.history).forEach(h => {
+                if (h.status === 'perfect') { perfectDays++; passDays++; }
+                else if (h.status === 'pass') passDays++;
+            });
+
+            document.getElementById('stat-perfect').innerText = perfectDays;
+            document.getElementById('stat-passed').innerText = passDays;
+
+            let updated = false;
+            TROPHIES.rare.forEach(t => { if(perfectDays >= t.target && !state.badges.includes(t.id)) { state.badges.push(t.id); updated = true; }});
+            TROPHIES.uncommon.forEach(t => { if(passDays >= t.target && !state.badges.includes(t.id)) { state.badges.push(t.id); updated = true; }});
+            
+            if(updated) { saveState(); renderTrophies(); }
+        }
+
+        function renderTrophies() {
+            const generateHTML = (tierList) => tierList.map(t => {
+                const unlocked = state.badges.includes(t.id);
+                return `
+                <div class="flex flex-col items-center p-3 bg-surface-900/50 rounded-xl border ${unlocked ? 'border-theme-500/50 shadow-[0_0_15px_rgba(var(--theme-rgb),0.2)]' : 'border-surface-700 trophy-locked'} transition-all">
+                    <div class="text-3xl mb-1">${t.icon}</div>
+                    <div class="text-[10px] font-black text-gray-200 uppercase text-center leading-tight mb-1">${t.name}</div>
+                    <div class="text-[8px] text-gray-500 uppercase text-center">${t.desc}</div>
+                </div>`;
+            }).join('');
+            
+            document.getElementById('trophies-rare').innerHTML = generateHTML(TROPHIES.rare);
+            document.getElementById('trophies-uncommon').innerHTML = generateHTML(TROPHIES.uncommon);
+            document.getElementById('trophies-secret').innerHTML = generateHTML(TROPHIES.secret);
+        }
+
+        function renderCharts() {
+            try {
+                if (typeof Chart === 'undefined') return;
+
+                const ctxT = document.getElementById('trendChart').getContext('2d');
+                const labels = []; const data = []; let sum = 0;
+                for(let i=6; i>=0; i--) {
+                    let d = new Date(); d.setDate(d.getDate() - i); let ds = getLocalYMD(d);
+                    labels.push(d.toLocaleDateString('default',{weekday:'short'}));
+                    let val = state.history[ds] ? state.history[ds].ratio * 100 : 0;
+                    data.push(val); sum += val;
+                }
+                document.getElementById('avg-completion-stat').innerText = `Avg: ${Math.round(sum/7)}%`;
+
+                const tColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-500').trim();
+                if(chartTrend) chartTrend.destroy();
+                chartTrend = new Chart(ctxT, {
+                    type: 'line',
+                    data: { labels, datasets: [{ label: 'Completion %', data, borderColor: tColor, backgroundColor: tColor+'33', fill: true, tension: 0.4, borderWidth: 3, pointBackgroundColor: tColor }] },
+                    options: { responsive: true, plugins: { legend: {display:false} }, scales: { y: { beginAtZero: true, max: 100, grid: {color: '#334155'} }, x: { grid: {color: 'transparent'} } }, color: '#94a3b8' }
+                });
+
+                const ctxR = document.getElementById('ratioChart').getContext('2d');
+                let coreComp=0, coreTot=0, sideComp=0, sideTot=0;
+                state.tasks.forEach(t => {
+                    if(t.isCore) { coreTot++; if(t.completed) coreComp++; }
+                    else { sideTot++; if(t.completed) sideComp++; }
+                });
+
+                if(chartRatio) chartRatio.destroy();
+                chartRatio = new Chart(ctxR, {
+                    type: 'doughnut',
+                    data: { labels: ['Core Done', 'Side Done', 'Missed'], datasets: [{ data: [coreComp, sideComp, (coreTot+sideTot)-(coreComp+sideComp)], backgroundColor: ['#f97316', tColor, '#334155'], borderWidth: 0 }] },
+                    options: { responsive: true, cutout: '75%', plugins: { legend: {display:false} } }
+                });
+            } catch (e) { console.warn("Charts blocked by browser."); }
+        }
+
+        function generateCoachInsights() {
+            const chat = document.getElementById('coach-chat-window');
+            chat.innerHTML = '';
+            
+            const addBubble = (msg, isUser=false) => {
+                chat.innerHTML += `<div class="flex w-full ${isUser ? 'justify-end' : 'justify-start'}">
+                    <div class="max-w-[85%] rounded-2xl p-3 text-sm font-medium ${isUser ? 'bg-surface-700 text-gray-200' : 'bg-theme-500/10 text-theme-100 border border-theme-500/30'}">
+                        ${isUser ? '' : '🤖 '}${msg}
+                    </div>
+                </div>`;
+            };
+
+            addBubble("Analyzing your local behavioral data...", true);
+
+            setTimeout(() => {
+                let passCount = 0;
+                for(let i=1; i<=3; i++) {
+                    let d = new Date(); d.setDate(d.getDate() - i);
+                    let stat = state.history[getLocalYMD(d)]?.status;
+                    if(stat === 'perfect' || stat === 'pass') passCount++;
+                }
+                
+                if (passCount === 3) addBubble("Your momentum is lethal right now. 3 straight passing days. Don't break the chain today.");
+                else if (passCount === 0) addBubble("Resistance has been high lately. Forget the past days. Focus purely on your Core Tasks today to get an easy Win.");
+                
+                let coreMisses = state.tasks.filter(t => t.isCore && !t.completed).length;
+                let sideHits = state.tasks.filter(t => !t.isCore && t.completed && t.id !== 'endowed').length;
+                
+                if (sideHits > 0 && coreMisses > 0 && getRatio() < 0.8) {
+                    addBubble("⚠️ Priority Alert: I see you completing Side Quests while leaving Core Tasks undone. Eat the frog first! Handle the Core.");
+                }
+
+                let chronicSkipped = state.tasks.filter(t => t.skippedCount >= 3);
+                if (chronicSkipped.length > 0) {
+                    addBubble(`Diagnostic: You've skipped a task for ${chronicSkipped[0].skippedCount} days. It's creating subconscious drag. Delete it, or tag it as a Spark.`);
+                }
+                
+                if (chat.children.length <= 1) addBubble("You're operating efficiently. Keep executing your baseline system.");
+                
+            }, 800);
+        }
+
+        function checkFrictionInsight() {
+            let skipped = state.tasks.find(t => t.skippedCount >= 2 && !t.completed);
+            const box = document.getElementById('friction-insight');
+            if(skipped) {
+                document.getElementById('friction-text').innerHTML = `💡 Coach Notice: You're stalling. Do it now, or delete it!`;
+                box.classList.remove('hidden'); box.classList.add('flex');
+            } else { box.classList.add('hidden'); }
+        }
+
+        window.startZenMode = function() {
+            const zen = document.getElementById('zen-mode');
+            const container = document.getElementById('zen-task-container');
+            
+            let target = state.tasks.find(t => t.isSpark && !t.completed) || state.tasks.find(t => t.isCore && !t.completed) || state.tasks.find(t => !t.completed);
+
+            if (!target) {
+                container.innerHTML = `<h2 class="text-4xl font-black text-white mb-4 uppercase">All Systems Go</h2><p class="text-gray-400">Day completely passed. Rest up.</p>`;
+            } else {
+                container.innerHTML = `
+                    <div class="bg-surface-800 p-10 rounded-3xl border border-surface-700 shadow-2xl flex flex-col items-center transform transition-all hover:scale-105">
+                        <span class="text-6xl mb-6 filter drop-shadow-lg">${target.category}</span>
+                        <h2 class="text-3xl md:text-5xl font-black text-white mb-8 leading-tight tracking-tight">${target.text}</h2>
+                        <button onclick="toggleTask('${target.id}')" class="btn-press bg-theme-500 hover:bg-theme-600 text-white text-xl font-bold py-5 px-14 rounded-full shadow-[0_0_30px_rgba(var(--theme-rgb),0.6)] uppercase tracking-widest">
+                            Destroy Task
+                        </button>
+                    </div>
+                `;
+            }
+            zen.classList.remove('hidden'); zen.classList.add('flex');
+            setTimeout(() => zen.classList.remove('opacity-0'), 10);
+        };
+        
+        window.closeZenMode = function() {
+            const zen = document.getElementById('zen-mode');
+            zen.classList.add('opacity-0'); setTimeout(() => { zen.classList.add('hidden'); zen.classList.remove('flex'); }, 500);
+        };
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+            const date = new Date(currentYear, currentMonth, 1);
+            document.getElementById('calendar-month-year').innerText = date.toLocaleDateString('default', { month: 'short', year: 'numeric' });
+            
+            for (let i = 0; i < date.getDay(); i++) grid.appendChild(document.createElement('div'));
+            
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dStr = getLocalYMD(new Date(currentYear, currentMonth, day));
+                const record = state.history[dStr];
+                const div = document.createElement('div');
+                
+                let heatClass = 'bg-surface-700/30 text-surface-600'; 
+                if(record) {
+                    if(record.status === 'freeze') heatClass = 'heat-freeze';
+                    else if(record.status === 'perfect') heatClass = 'heat-perfect';
+                    else if(record.status === 'pass') heatClass = 'heat-pass';
+                    else if(record.status === 'try') heatClass = 'heat-try';
+                    else heatClass = 'heat-miss';
+                }
+
+                div.className = `aspect-square rounded-lg flex items-center justify-center text-xs md:text-sm font-bold transition-transform hover:scale-110 cursor-pointer shadow-sm ${heatClass} ${dStr === getLocalYMD() ? 'ring-2 ring-white ring-offset-2 ring-offset-surface-800' : ''}`;
+                div.innerText = day;
+                if(record) div.title = `${Math.round(record.ratio*100)}% - ${record.status.toUpperCase()}`;
+                grid.appendChild(div);
+            }
+        }
+        
+        window.changeMonth = function(dir) {
+            currentMonth += dir; if(currentMonth < 0) { currentMonth=11; currentYear--; } else if(currentMonth > 11) { currentMonth=0; currentYear++; }
+            renderCalendar();
+        };
+
+        window.switchTab = function(tab) {
+            ['analytics','history','settings','trophies','coach'].forEach(t => {
+                document.getElementById('content-'+t).classList.add('hidden');
+                document.getElementById('tab-'+t).className = 'flex-1 py-2 text-xs md:text-sm font-bold rounded-xl text-gray-400 hover:text-white transition-colors';
+            });
+            document.getElementById('content-'+tab).classList.remove('hidden');
+            if(tab === 'trophies' || tab === 'coach') document.getElementById('content-'+tab).classList.add('flex');
+            document.getElementById('tab-'+tab).className = 'flex-1 py-2 text-xs md:text-sm font-bold rounded-xl bg-surface-700 text-white transition-colors shadow';
+            
+            if(tab === 'analytics') renderCharts();
+            if(tab === 'coach') generateCoachInsights();
+        };
+
+        window.setTheme = function(color) {
+            state.settings.theme = color; saveState();
+            const root = document.documentElement;
+            root.style.setProperty('--theme-400', themes[color][400]);
+            root.style.setProperty('--theme-500', themes[color][500]);
+            root.style.setProperty('--theme-600', themes[color][600]);
+            root.style.setProperty('--theme-rgb', themes[color].rgb);
+            if(chartTrend) renderCharts();
+        };
+
+        window.requestPushPermission = function() {
+            if (!("Notification" in window)) return alert("Browser does not support notifications.");
+            Notification.requestPermission().then(perm => {
+                if(perm === "granted") {
+                    state.settings.notifications = true; saveState();
+                    new Notification("Momentum Pro", { body: "Reminders enabled! Focus up." });
+                }
+            });
+        };
+
+        function checkNotifications() {
+            if(state.settings.notifications && Notification.permission === "granted") {
+                const n = new Date();
+                if(n.getHours() === 20 && n.getMinutes() === 0 && getRatio() < 0.8) {
+                    new Notification("Check your Momentum", { body: "It's 8PM. You haven't passed today's 80% threshold yet. Let's get it done." });
+                }
+            }
+        }
+
+        window.exportData = function() {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
+            a.download = `MomentumOS_${getLocalYMD()}.json`; a.click();
+        };
+        
+        document.getElementById('btn-import').addEventListener('change', (e) => {
+            const fr = new FileReader();
+            fr.onload = (ev) => { try { state = JSON.parse(ev.target.result); saveState(); location.reload(); } catch(e){ alert('Invalid Data'); } };
+            if(e.target.files[0]) fr.readAsText(e.target.files[0]);
+        });
+        
+        window.resetData = function() { if(confirm("Are you sure? This wipes all streaks and trophies permanently.")) { localStorage.removeItem('momentumProOS'); location.reload(); } };
+
+        function generatePWA() {
+            try {
+                if (window.location.protocol === 'file:') return;
+                
+                const manifest = { name: "Momentum OS", short_name: "Momentum", display: "standalone", background_color: "#0f172a", theme_color: "#6366f1", icons: [{ src: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>", sizes: "192x192", type: "image/svg+xml" }] };
+                const link = document.createElement('link'); link.rel = 'manifest'; link.href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest)); document.head.appendChild(link);
+                const swCode = `self.addEventListener('install', e => self.skipWaiting()); self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))));`;
+                if('serviceWorker' in navigator) navigator.serviceWorker.register(URL.createObjectURL(new Blob([swCode], {type:'application/javascript'}))).catch(()=>{});
+            } catch (e) { console.warn("PWA Generator blocked"); }
+        }
+    </script>
+</body>
+</html><script src="./cloudSync.js"></script>

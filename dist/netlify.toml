@@ -1,0 +1,9 @@
+﻿[dev]
+  framework = "#static"
+  publish = "."
+  port = 8888
+
+[[redirects]]
+  from = "/"
+  to = "/trackyourwork.html"
+  status = 200
