@@ -1,0 +1,10 @@
+﻿{
+  "functions": {
+    "api/**/*.mts": { "runtime": "nodejs-edge" }
+  },
+  "rewrites": [
+    { "source": "/api/mcp", "destination": "/netlify/functions/mcp.mts" },
+    { "source": "/api/sync", "destination": "/netlify/functions/sync.mts" },
+    { "source": "/(.*)", "destination": "/trackyourwork.html" }
+  ]
+}
