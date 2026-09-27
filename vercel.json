@@ -1,8 +1,8 @@
 ﻿{
   "version": 2,
   "rewrites": [
-    { "source": "/api/mcp", "destination": "/api/mcp.mts" },
-    { "source": "/api/sync", "destination": "/api/sync.mts" },
+    { "source": "/api/mcp", "destination": "/api/mcp.js" },
+    { "source": "/api/sync", "destination": "/api/sync.js" },
     { "source": "/(.*)", "destination": "/trackyourwork.html" }
   ]
 }
